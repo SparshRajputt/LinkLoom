@@ -1,0 +1,19 @@
+# Node modules (dependencies)
+node_modules/
+
+# Environment variable files (sensitive information)
+.env
+
+# Build output (compiled JavaScript files)
+dist/
+
+# TypeScript build info
+tsconfig.tsbuildinfo
+
+# Logs
+logs/
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
