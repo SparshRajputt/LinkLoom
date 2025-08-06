@@ -35,8 +35,10 @@ const shareSchema = new mongoose.Schema({
         required: true,
     },
     shareLink: { type: String, required: true, unique: true },
-    createdAt: { type: Date, default: Date.now },
+    createdAt: { type: Date, default: Date.now, required: false },
 });
+
 const ShareContent = mongoose.model("ShareContent", shareSchema);
+
 
 export {User, Content, ShareContent};
