@@ -2,9 +2,11 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
-import { User, Content, ShareContent } from "./db.js";
+import { User, Content, Link } from "./db.js";
 import dotenv from "dotenv";
 import { userMiddleware } from "./middleware.js";
+import { generateShareToken } from "./generateShareToken.js";
+
 dotenv.config();
 
 const app = express();
@@ -157,69 +159,60 @@ app.delete("/api/v1/content/", userMiddleware, async (req, res) => {
   }
 });
 
-app.post("/api/v1/brain/share", async (req, res) => {
+app.post("/api/v1/brain/share", userMiddleware, async (req, res) => {
   try {
-    const { contentId } = req.body;
+    const { share } = req.body;
 
-    if (!contentId) {
-      return res.status(400).json({ message: "Content ID is required" });
+    if (!share) {
+      return res.status(400).json({ message: "Share link not provided" });
     }
 
-    const contentExists = Content.findById(contentId);
-    if (!contentExists) {
-      return res.status(404).json({ message: "Content not found" });
-    }
-
-    const shareLink = `https://brain.com/share/${contentId}`;
-
-    const existingShare = await ShareContent.findOne({ contentId });
-    if (existingShare) {
-      return res.status(409).json({ message: "Share link already exists" });
-    }
-
-    await ShareContent.create({ contentId, shareLink });
-    res.status(201).json({
-      message: "Share link created successfully",
-      shareLink: shareLink,
+    const existingLink = await Link.findOne({
+      userId: req.body.userId,
+      share: true
     })
+
+    if( existingLink ){
+      return res.status(400).json({ message: "Share link already exists" });
+    }
+
+    const newLink = await Link.create({
+      userId: req.body.userId,
+      hash: generateShareToken(12),
+      createdAt: new Date(),
+      share: true,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default to 7 days from now
+    });
+
+    return res.status(201).json({
+      message: "Share link created successfully",
+      Link: {
+        url: `http://localhost:3000/api/v1/brain/${newLink.hash}`,
+        expiresAt: newLink.expiresAt,
+      },
+    });
   } catch (error) {
-    console.log("Error creating share link: ", error);
-    return res.status(500).json({ message: "internal server error" });
+    console.log("Error creating share link:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
 app.get("/api/v1/brain/:shareLink", async (req, res) => {
-
-  try{
+  try {
     const { shareLink } = req.params;
-
-    const fullShareLink = `https://brain.com/share/${shareLink}`;
-
-    const shareContent = await ShareContent.findOne({ shareLink: fullShareLink })
-
-    if(!shareContent) {
+    const link = await Link.findOne({ hash: shareLink, share: true});
+    if ( !link ){
       return res.status(404).json({ message: "Share link not found" });
     }
-
-    const content = await Content.findById(shareContent.contentId).populate("userId", "firstName LastName");
-
-    if(!content) {
-      return res.status(404).json({ message: "Content not found" });
+    if (link.expiresAt < new Date()){
+      return res.status(410).json({ message: "Share link has expired" });
     }
-
-    res.status(200).json({
-      title: content.title,
-      content: content.content,
-      createdAt: content.createdAt,
-      author: content.userId,
-    });
-    
-  } catch (error: any){
-    console.log("Error fetching share link:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    const shareLinkContent = await Content.find({ userId: link.userId}).populate("userId", "firstName lastName");
+    res.status(200).json(shareLinkContent); 
+  } catch (error) {
+    console.log("Error fetching share link content:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
-
-  
 });
 
 app.listen(3000, () => {

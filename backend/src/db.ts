@@ -28,17 +28,14 @@ const contentSchema = new mongoose.Schema({
 });
 const Content = mongoose.model("Content", contentSchema);
 
-const shareSchema = new mongoose.Schema({
-    contentId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Content",
-        required: true,
-    },
-    shareLink: { type: String, required: true, unique: true },
-    createdAt: { type: Date, default: Date.now, required: false },
-});
-
-const ShareContent = mongoose.model("ShareContent", shareSchema);
+const linkSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    hash: { type: String, required: true, unique: true },
+    createdAt: { type: Date, default: Date.now },
+    share: { type: Boolean, default: false },
+    expiresAt: { type: Date, default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) }, // Default to 7 days from now
+})
+const Link = mongoose.model("Link", linkSchema);
 
 
-export {User, Content, ShareContent};
+export {User, Content, Link};
