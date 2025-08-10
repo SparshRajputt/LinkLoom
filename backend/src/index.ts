@@ -163,34 +163,72 @@ app.post("/api/v1/brain/share", userMiddleware, async (req, res) => {
   try {
     const { share } = req.body;
 
-    if (!share) {
+    if (share === undefined || share === null) {
       return res.status(400).json({ message: "Share link not provided" });
     }
 
     const existingLink = await Link.findOne({
       userId: req.body.userId,
-      share: true
-    })
+      share: true,
+    });
 
-    if( existingLink ){
-      return res.status(400).json({ message: "Share link already exists" });
+    if (share === false) {
+      if (!existingLink || !existingLink.share ) {
+        return res
+          .status(404)
+          .json({ message: "No share link found to disable" });
+      }
+      await Link.deleteOne({ userId: req.body.userId });
+      return res
+        .status(200)
+        .json({ message: "Share link disabled successfully" });
     }
 
-    const newLink = await Link.create({
-      userId: req.body.userId,
-      hash: generateShareToken(12),
-      createdAt: new Date(),
-      share: true,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default to 7 days from now
-    });
+    if(share === true){
 
-    return res.status(201).json({
-      message: "Share link created successfully",
-      Link: {
-        url: `http://localhost:3000/api/v1/brain/${newLink.hash}`,
-        expiresAt: newLink.expiresAt,
-      },
-    });
+      if ( existingLink && existingLink.share ) {
+        return res.status(400).json({
+          message: "Share link already exists",
+          Link: {
+            url: `http://localhost:3000/api/v1/brain/${existingLink.hash}`,
+            expiresAt: existingLink.expiresAt
+          }
+        });
+      }
+
+      if(existingLink && !existingLink.share){
+        existingLink.share = true;
+        existingLink.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Reset expiration to 7 days
+        await existingLink.save();
+
+        return res.status(200).json({
+          message: "Share link enables successfully",
+          Link: {
+            url: `http://localhost:3000/api/v1/brain/${existingLink.hash}`,
+            expiresAt: existingLink.expiresAt
+          }
+        })
+      }
+  
+      const newLink = await Link.create({
+        userId: req.body.userId,
+        hash: generateShareToken(12),
+        createdAt: new Date(),
+        share: true,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default to 7 days from now
+      });
+  
+      return res.status(201).json({
+        message: "Share link created successfully",
+        Link: {
+          url: `http://localhost:3000/api/v1/brain/${newLink.hash}`,
+          expiresAt: newLink.expiresAt,
+        },
+      });
+    }
+
+    return res.status(400).json({ message: "Invalid value must be true or false" });
+
   } catch (error) {
     console.log("Error creating share link:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -200,15 +238,17 @@ app.post("/api/v1/brain/share", userMiddleware, async (req, res) => {
 app.get("/api/v1/brain/:shareLink", async (req, res) => {
   try {
     const { shareLink } = req.params;
-    const link = await Link.findOne({ hash: shareLink, share: true});
-    if ( !link ){
+    const link = await Link.findOne({ hash: shareLink, share: true });
+    if (!link) {
       return res.status(404).json({ message: "Share link not found" });
     }
-    if (link.expiresAt < new Date()){
+    if (link.expiresAt < new Date()) {
       return res.status(410).json({ message: "Share link has expired" });
     }
-    const shareLinkContent = await Content.find({ userId: link.userId}).populate("userId", "firstName lastName");
-    res.status(200).json(shareLinkContent); 
+    const shareLinkContent = await Content.find({
+      userId: link.userId,
+    }).populate("userId", "firstName lastName");
+    res.status(200).json(shareLinkContent);
   } catch (error) {
     console.log("Error fetching share link content:", error);
     res.status(500).json({ message: "Internal server error" });
